@@ -1,0 +1,53 @@
+{
+  "name": "to-parse",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "check": "ts-fences"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.12.11",
+    "ts-fences": "^0.1.0",
+    "typescript": "^5.4.5"
+  },
+  "structure": {
+    "layers": [
+      {
+        "name": "domain",
+        "files": [
+          "src/domain/*.ts"
+        ],
+        "allowImports": []
+      },
+      {
+        "name": "business",
+        "files": [
+          "src/business/*.ts"
+        ],
+        "allowImports": [
+          "domain"
+        ]
+      },
+      {
+        "name": "root",
+        "files": [
+          "src/index.ts"
+        ],
+        "allowImports": [
+          "business",
+          "domain"
+        ]
+      }
+    ],
+    "exclude": [
+      "node_modules",
+      "*.d.ts"
+    ]
+  }
+}

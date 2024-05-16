@@ -1,0 +1,29 @@
+{
+  "name": "ts-fences",
+  "version": "0.1.0",
+  "description": "",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "bin": {
+    "ts-fences": "bin/ts-fences.js"
+  },
+  "type": "module",
+  "keywords": ["typescript", "good-fences", "dependency-cruiser", "import"],
+  "author": "Guénolé de Cadoudal",
+  "license": "ISC",
+  "scripts": {
+    "build": "tsc",
+    "prepublish": "tsc"
+  },
+  "devDependencies": {
+    "@types/glob-to-regexp": "^0.4.4",
+    "@types/node": "^20.12.12",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.10.2",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "glob-to-regexp": "^0.4.1",
+    "globby": "^14.0.1"
+  }
+}
