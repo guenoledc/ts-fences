@@ -1,16 +1,14 @@
 {
-  "name": "to-parse",
+  "name": "test-project",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.ts",
+  "description": "ts-fences test project",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "check": "ts-fences"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.12.11",
     "ts-fences": "^0.1.0",
