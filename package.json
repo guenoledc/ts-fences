@@ -18,7 +18,7 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc",
-    "prepublish": "tsc"
+    "prepare": "tsc"
   },
   "devDependencies": {
     "@types/glob-to-regexp": "^0.4.4",
