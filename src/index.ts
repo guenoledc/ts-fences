@@ -7,12 +7,15 @@ import path from "node:path";
 export interface ProjectStructureLayer {
   name: string;
   files: string[];
-  allowImports: string[];
+  allowImports?: string[];
+  exports?: string [];
 }
 
 export interface ProjectStructureConfig {
   layers: ProjectStructureLayer[];
   exclude?: string[];
+  traceFile?: string;
+  ignoreCycles?: boolean;
 }
 
 export interface ImportDiagnostic {
@@ -26,10 +29,11 @@ export interface ImportDiagnostic {
 export interface FileRef {
   name: string;
   imported: string[];
+  exported: boolean;
   layers: string[];
   diagnostics?: ImportDiagnostic[];
+  cyclical?: boolean;
 }
-// const fileMap = new Map<string, FileRef>();
 
 function createParseConfigHost(): ts.ParseConfigHost {
   const h = ts.createCompilerHost({});
@@ -49,7 +53,7 @@ function createCompilerHostWithFileCollection(opt: ts.CompilerOptions): Compiler
   const host = ts.createCompilerHost(opt);
   const fileMap = new Map<string, FileRef>();
   const resolveModuleNameLiterals = (moduleLiterals: readonly ts.StringLiteralLike[], containingFile: string, redirectedReference: ts.ResolvedProjectReference | undefined, options: ts.CompilerOptions, containingSourceFile: ts.SourceFile, reusedNames: readonly ts.StringLiteralLike[] | undefined): readonly ts.ResolvedModuleWithFailedLookupLocations[] => {
-    fileMap.has(containingFile) || fileMap.set(containingFile, {imported: [], name: containingFile, layers: []});
+    fileMap.has(containingFile) || fileMap.set(containingFile, {imported: [], name: containingFile, layers: [], exported: true});
     const fileRef = fileMap.get(containingFile)!;
     const res: ts.ResolvedModuleWithFailedLookupLocations[] = [];
     // if (host.resolveModuleNameLiterals) {
@@ -65,10 +69,14 @@ function createCompilerHostWithFileCollection(opt: ts.CompilerOptions): Compiler
         // console.log("resolved:", m.text, "in", containingFile, "==>", r.resolvedModule?.resolvedFileName);
         if (r.resolvedModule) {
           const importedFile = r.resolvedModule.resolvedFileName;
-          fileRef.imported.push(importedFile);
-          fileMap.has(importedFile) || fileMap.set(importedFile, {imported: [], name: importedFile, layers: []});
+          if (!fileRef.imported.includes(importedFile)) {
+            fileRef.imported.push(importedFile);
+            fileMap.has(importedFile) || fileMap.set(importedFile, {imported: [], name: importedFile, layers: [], exported: true});
+          }
         } else {
-          fileRef.imported.push(m.text);
+          if (!fileRef.imported.includes(m.text)) {
+            fileRef.imported.push(m.text);
+          }
           // fileMap.has(m.text) || fileMap.set(m.text, {imported: [], name: m.text, layers: []});
         }
         res.push(r);
@@ -140,12 +148,57 @@ function setFileLayers(files: string[], map: Map<string, FileRef>, config: Proje
   // parse the files to tag the layer
   for(const f of files) {
     const fileRef = map.get(f)!;
+    let exported: boolean|undefined = undefined;
     for(const layer of config.layers) {
       if ( layer.files.some(p=>GlobToRegExp(`**/${p}`, {extended: true, globstar: true}).test(f)) ) {
         fileRef.layers.push(layer.name);
+        if (layer.exports) {
+          exported = layer.exports.some(p=>GlobToRegExp(`**/${p}`, {extended: true, globstar: true}).test(f));
+        }
       }
     }
+    if (exported === undefined) fileRef.exported = true;
+    else fileRef.exported = exported;
+    // console.log("File", f, "is in layers", fileRef.layers, "exported", fileRef.exported, "<==",exported);
+    
   }
+}
+
+
+function detectCycles(map: Map<string, FileRef>, file: string, visited: Map<string, boolean>): string[] {
+  
+  // we have reached a file that has already been visited
+  if (visited.has(file) && visited.get(file)) {
+    return [file];
+  }
+  
+  const fileRef = map.get(file);
+    
+  // file not in the map, we cannot go further in the search
+  if (!fileRef) return [];
+  
+  // if the file is already classified as cyclical or not, we can stop the search
+  if (fileRef.cyclical !== undefined) return [];
+
+  visited.set(file, true);
+  // loop in the dependencies
+  for(const imported of fileRef.imported) {
+    const cycles = detectCycles(map, imported, visited);
+    if (cycles.length>0) {
+      if (file === cycles[cycles.length-1]) {
+        fileRef.cyclical = true;
+        fileRef.diagnostics || (fileRef.diagnostics = []);
+        fileRef.diagnostics.push({
+          source: file, imported: "", allowed: [], forbidden: [],
+          diagnosticText: `Cycle detected in imports: ${[file, ...cycles].join("\n -> ")}`
+        });
+        return []; // cycle detected, stop the search
+      } else return [file, ...cycles]; // propagate the cycle
+    }
+  }
+  visited.set(file, false);
+  fileRef.cyclical = false;
+  return [];
 }
 
 function checkImportCompliance(files: string[], map:Map<string, FileRef>, config: ProjectStructureConfig ) {
@@ -153,32 +206,58 @@ function checkImportCompliance(files: string[], map:Map<string, FileRef>, config
   // parse the files to check the imports
   for(const f of files) {
     const fileRef = map.get(f)!;
+    // if (fileRef.layers.length === 0) continue; // no layer for this file, no need to check the imports
     // check the imported files and modules
     for(const imported of fileRef.imported) {
       const importedRef = map.get(imported);
       if (!importedRef) continue;
-      // the layers of the imported file must be allowed by the current file
-      const importedLayers = importedRef.layers;
-      const allowedLayers = config.layers.filter(l=>fileRef.layers.includes(l.name)).flatMap(l=>l.allowImports);
-      const forbiddenLayers = importedLayers.filter(l=>!allowedLayers.includes(l));
-      if (forbiddenLayers.length>0) {
-        // console.log("Forbidden import", f, "imports", imported, importedLayers, "from layers", allowedLayers, "forbidden layers", forbiddenLayers);
+
+      // if the imported file is in the same layer, skip the control
+      if (fileRef.layers.some(l=>importedRef.layers.includes(l))) continue;
+
+      // the imported file must have been exported
+      if (!importedRef.exported ) {
+        // console.log("Forbidden import", f, "imports", imported, "which is not exported");
         fileRef.diagnostics || (fileRef.diagnostics = []);
         fileRef.diagnostics.push({
-          source: f, imported, allowed: allowedLayers, forbidden: forbiddenLayers,
-          diagnosticText: `"${f}" in layer(s) "${fileRef.layers.join(', ')}" imports "${imported}" from layer(s) "${importedLayers.join(', ')}". Layer(s) "${forbiddenLayers.join(', ')}" not allowed. Only import from "${allowedLayers.join(', ')}" layer(s)`
+          source: f, imported, allowed: [], forbidden: [],
+          diagnosticText: `"${f}" imports "${imported}" which is not exported`
         });
-      } 
-      // else {
-      //   console.log("Allowed import", f, "imports", imported);
-      // }
+        // continue;
+      }
+
+      // the layers of the imported file must be allowed by the current file
+      // if the file tested has not been put in a layer then it can import anything
+      if (fileRef.layers.length > 0) {
+        const importedLayers = importedRef.layers;
+        const allowedLayers = config.layers.filter(l=>fileRef.layers.includes(l.name)).flatMap(l=>l.allowImports||[]);
+        allowedLayers.push(...fileRef.layers); // a file can import from its own layer
+        const forbiddenLayers = importedLayers.filter(l=>!allowedLayers.includes(l));
+        if (forbiddenLayers.length>0) {
+          // console.log("Forbidden import", f, "imports", imported, importedLayers, "from layers", allowedLayers, "forbidden layers", forbiddenLayers);
+          fileRef.diagnostics || (fileRef.diagnostics = []);
+          fileRef.diagnostics.push({
+            source: f, imported, allowed: allowedLayers, forbidden: forbiddenLayers,
+            diagnosticText: `"${f}" in layer(s) "${fileRef.layers.join(', ')}" imports "${imported}" from layer(s) "${importedLayers.join(', ')}". Layer(s) "${forbiddenLayers.join(', ')}" not allowed. Only import from "${allowedLayers.join(', ')}" layer(s)`
+          });
+        } 
+        // else {
+        //   console.log("Allowed import", f, "imports", imported);
+        // }
+      }
+    }
+
+    // check for cycles
+    if (!config.ignoreCycles) {
+      detectCycles(map, f, new Map<string, boolean>());
     }
   }
 
 }
 
-function getDiagnostics(map: Map<string, FileRef> ): ImportDiagnostic[] {
-  return Array.from(map.values()).filter(f => f!.diagnostics).flatMap(f => f!.diagnostics).filter(d => d) as any;
+function getDiagnostics(map: Map<string, FileRef>, config: ProjectStructureConfig ): ImportDiagnostic[] {
+  const files = filterExclusion(map, config);
+  return files.map(f=>map.get(f)!).filter(f => f!.diagnostics).flatMap(f => f!.diagnostics).filter(d => d) as any;
 }
 
 // const conf: ProjectStructureConfig = {
@@ -227,10 +306,15 @@ export function checkProjectStructure(basePath: string) {
   const fileMap = host.files;
 
   const files = filterExclusion(fileMap, structureConfig);
-
   setFileLayers(files, fileMap, structureConfig);
   checkImportCompliance(files, fileMap, structureConfig);
-  return getDiagnostics(fileMap);
+
+  if (structureConfig.traceFile) {
+    // save the fileMap to a file for debugging
+    fs.writeFileSync(structureConfig.traceFile, JSON.stringify(Object.fromEntries(Array.from(fileMap.entries()).filter(([key, value])=>!key.includes("node_modules")).sort((a,b)=>a[0]==b[0]?0:(a[0]<b[0]?-1:1))), null, 2));
+    // fs.writeFileSync("fileMap.json", JSON.stringify(Object.fromEntries(Array.from(fileMap.entries()).sort((a,b)=>a[0]==b[0]?0:(a[0]<b[0]?-1:1))), null, 2));
+  }
+  return getDiagnostics(fileMap, structureConfig);
 }
 
 
