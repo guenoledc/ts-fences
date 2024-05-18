@@ -14,6 +14,13 @@
     "dependency-cruiser",
     "import"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guenoledc/ts-fences.git"
+  },
+  "bugs": {
+    "url": "https://github.com/guenoledc/ts-fences/issues"
+  },
   "author": "Guénolé de Cadoudal",
   "license": "MIT",
   "scripts": {
