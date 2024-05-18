@@ -1,6 +1,6 @@
 {
   "name": "ts-fences",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -8,7 +8,12 @@
     "ts-fences": "bin/ts-fences.js"
   },
   "type": "module",
-  "keywords": ["typescript", "good-fences", "dependency-cruiser", "import"],
+  "keywords": [
+    "typescript",
+    "good-fences",
+    "dependency-cruiser",
+    "import"
+  ],
   "author": "Guénolé de Cadoudal",
   "license": "MIT",
   "scripts": {
