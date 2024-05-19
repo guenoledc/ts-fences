@@ -31,8 +31,7 @@ The `ts-fences` script looks for
 
 The configuration in `structure` inside the `package.json` file is an object with the following fields:
 
-- `layers`: an array of objects with the following fields:
-  - `name`: the name of the layer
+- `layers`: a map of layers (`name`=>`layer`) with the following fields:
   - `files`: an array of glob patterns to match the files of the layer
   - `allowImports`: an array of layer names that are allowed to be imported by this layer. When not defined, any layer can be imported.
   - `export`: an array of glob patterns to define the modules that are exported by the layer. When not defined, all modules are exported.
@@ -70,25 +69,22 @@ Here is an example of a `package.json` file with a `structure` field:
     "fences": "ts-fences"
   },
   "structure": {
-    "layers": [
-      {
-        "name": "domain",
+    "layers": {
+      "domain": {
         "files": ["src/domain/**/*.ts"],
         "allowImports": ["infrastructure"],
         "export": ["index.ts"]
       },
-      {
-        "name": "application",
+      "application": {
         "files": ["src/application/**/*.ts"],
         "allowImports": ["domain"],
         "export": ["module1.ts", "module2.ts"]
       },
-      {
-        "name": "infrastructure",
+      "infrastructure": {
         "files": ["src/infrastructure/**/*.ts"],
         "allowImports": ["domain", "application"]
       }
-    ],
+    },
     "exclude": ["**/*.spec.ts"],
     "traceFile": "trace.json",
     "ignoreCycles": false

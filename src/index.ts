@@ -5,14 +5,14 @@ import path from "node:path";
 
 
 export interface ProjectStructureLayer {
-  name: string;
+  // name: string;
   files: string[];
   allowImports?: string[];
   exports?: string [];
 }
 
 export interface ProjectStructureConfig {
-  layers: ProjectStructureLayer[];
+  layers: {[name:string]: ProjectStructureLayer};
   exclude?: string[];
   traceFile?: string;
   ignoreCycles?: boolean;
@@ -149,9 +149,10 @@ function setFileLayers(files: string[], map: Map<string, FileRef>, config: Proje
   for(const f of files) {
     const fileRef = map.get(f)!;
     let exported: boolean|undefined = undefined;
-    for(const layer of config.layers) {
+    for(const layerName in config.layers) {
+      const layer = config.layers[layerName];
       if ( layer.files.some(p=>GlobToRegExp(`**/${p}`, {extended: true, globstar: true}).test(f)) ) {
-        fileRef.layers.push(layer.name);
+        fileRef.layers.push(layerName);
         if (layer.exports) {
           exported = layer.exports.some(p=>GlobToRegExp(`**/${p}`, {extended: true, globstar: true}).test(f));
         }
@@ -230,7 +231,7 @@ function checkImportCompliance(files: string[], map:Map<string, FileRef>, config
       // if the file tested has not been put in a layer then it can import anything
       if (fileRef.layers.length > 0) {
         const importedLayers = importedRef.layers;
-        const allowedLayers = config.layers.filter(l=>fileRef.layers.includes(l.name)).flatMap(l=>l.allowImports||[]);
+        const allowedLayers = fileRef.layers.map(l=>config.layers[l]).flatMap(l=>l.allowImports||[]);
         allowedLayers.push(...fileRef.layers); // a file can import from its own layer
         const forbiddenLayers = importedLayers.filter(l=>!allowedLayers.includes(l));
         if (forbiddenLayers.length>0) {
@@ -290,7 +291,7 @@ export function checkProjectStructure(basePath: string) {
   if (!structureConfig) { // make a default config
     console.warn("WARN: No structure config found in package.json. Using a default one. You should add a 'structure' field in your package.json following type ProjectStructureConfig.");
     structureConfig = {
-      layers: []
+      layers: {}
     }
   }
 
@@ -316,12 +317,3 @@ export function checkProjectStructure(basePath: string) {
   }
   return getDiagnostics(fileMap, structureConfig);
 }
-
-
-// const basePath = "/Users/guenole/VSCode/learn-tsc-api/to-parse";
-// const diagnostics = checkProjectStructure(basePath);
-// console.log("Diagnostics:\n" + diagnostics.map(d=>d.diagnosticText).join("\n"));
-
-
-
-

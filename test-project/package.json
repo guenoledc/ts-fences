@@ -15,16 +15,14 @@
     "typescript": "^5.4.5"
   },
   "structure": {
-    "layers": [
-      {
-        "name": "domain",
+    "layers": {
+      "domain": {
         "files": [
           "src/domain/*.ts"
         ],
         "allowImports": []
       },
-      {
-        "name": "business",
+      "business": {
         "files": [
           "src/business/*.ts"
         ],
@@ -32,8 +30,7 @@
           "domain"
         ]
       },
-      {
-        "name": "root",
+      "root": {
         "files": [
           "src/index.ts"
         ],
@@ -42,7 +39,7 @@
           "domain"
         ]
       }
-    ],
+    },
     "exclude": [
       "node_modules",
       "*.d.ts"
