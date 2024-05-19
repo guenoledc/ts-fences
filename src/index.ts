@@ -18,7 +18,13 @@ export interface ProjectStructureConfig {
   ignoreCycles?: boolean;
 }
 
+export enum ImportDiagnosticCode {
+  IMPORT_NOT_EXPORTED = "NOT_EXPORTED",
+  IMPORT_FROM_FORBIDDEN_LAYER = "FORBIDDEN_LAYER",
+  CYCLE_DETECTED = "CYCLE_DETECTED"
+}
 export interface ImportDiagnostic {
+  code: ImportDiagnosticCode
   source: string;
   imported: string;
   allowed: string[];
@@ -92,6 +98,11 @@ function createCompilerHostWithFileCollection(opt: ts.CompilerOptions): Compiler
   
 }
 
+/** convert an absolute path into a relative file based on the current working directory */
+function rel(file: string) {
+  if (path.isAbsolute(file)) return path.relative(process.cwd(), file);
+  else return file;
+}
 
 // create a function that finds the package.json in the current folder or the folders below
 function findPackageJson(fromDir?: string): string | undefined {
@@ -190,8 +201,9 @@ function detectCycles(map: Map<string, FileRef>, file: string, visited: Map<stri
         fileRef.cyclical = true;
         fileRef.diagnostics || (fileRef.diagnostics = []);
         fileRef.diagnostics.push({
-          source: file, imported: "", allowed: [], forbidden: [],
-          diagnosticText: `Cycle detected in imports: ${[file, ...cycles].join("\n -> ")}`
+          code: ImportDiagnosticCode.CYCLE_DETECTED,
+          source: rel(file), imported: "", allowed: [], forbidden: [],
+          diagnosticText: `Cycle detected in imports: ${[rel(file), ...cycles.map(f=>rel(f))].join(" <= ")}`
         });
         return []; // cycle detected, stop the search
       } else return [file, ...cycles]; // propagate the cycle
@@ -221,8 +233,9 @@ function checkImportCompliance(files: string[], map:Map<string, FileRef>, config
         // console.log("Forbidden import", f, "imports", imported, "which is not exported");
         fileRef.diagnostics || (fileRef.diagnostics = []);
         fileRef.diagnostics.push({
-          source: f, imported, allowed: [], forbidden: [],
-          diagnosticText: `"${f}" imports "${imported}" which is not exported`
+          code: ImportDiagnosticCode.IMPORT_NOT_EXPORTED,
+          source: rel(f), imported: rel(imported), allowed: [], forbidden: [],
+          diagnosticText: `"${rel(f)}" imports "${rel(imported)}" which is not exported`
         });
         // continue;
       }
@@ -238,8 +251,9 @@ function checkImportCompliance(files: string[], map:Map<string, FileRef>, config
           // console.log("Forbidden import", f, "imports", imported, importedLayers, "from layers", allowedLayers, "forbidden layers", forbiddenLayers);
           fileRef.diagnostics || (fileRef.diagnostics = []);
           fileRef.diagnostics.push({
-            source: f, imported, allowed: allowedLayers, forbidden: forbiddenLayers,
-            diagnosticText: `"${f}" in layer(s) "${fileRef.layers.join(', ')}" imports "${imported}" from layer(s) "${importedLayers.join(', ')}". Layer(s) "${forbiddenLayers.join(', ')}" not allowed. Only import from "${allowedLayers.join(', ')}" layer(s)`
+            code: ImportDiagnosticCode.IMPORT_FROM_FORBIDDEN_LAYER,
+            source: rel(f), imported: rel(f), allowed: allowedLayers, forbidden: forbiddenLayers,
+            diagnosticText: `"${rel(f)}" (layer: ${fileRef.layers.join(', ')}) imports "${rel(imported)}" (layer: ${importedLayers.join(', ')}). Layer(s) ${forbiddenLayers.join(', ')} not allowed. Only import from ${allowedLayers.join(', ')}`
           });
         } 
         // else {

@@ -6,7 +6,7 @@ const diagnostics = checkProjectStructure(basePath);
 if (diagnostics.length === 0) {
     console.log("Project structure is correct.");
 } else {
-    console.log("Diagnostics:\n" + diagnostics.map(d=>d.diagnosticText).join("\n"));
+    console.log("Project structure not compliant:\n" + diagnostics.map(d=>`${d.code}: ${d.diagnosticText}`).join("\n"));
     process.exit(1);
 }
 
